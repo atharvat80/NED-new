@@ -4,7 +4,7 @@ import pickle
 import nltk
 import numpy as np
 from src.models.base import BaseWiki2Vec, cos_sim
-from src.utils import get_edit_dist, get_entity_prior, get_prior_prob
+from src.utils.GBRT import get_edit_dist, get_entity_prior, get_prior_prob
 
 # Define data path
 CWD = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -41,14 +41,6 @@ class GBRT(BaseWiki2Vec):
                     unamb_entities.append(candidate)
         return list(set(unamb_entities))
 
-    def context_sim(self, context, candidates):
-        scores = {}
-        context_emb = self.encode_sentence(context)
-        candidate_emb = {i: self.encode_entity(i) for i in candidates}
-        for i in candidate_emb:
-            scores[i] = cos_sim(context_emb, candidate_emb[i])
-        return scores
-
     def get_context_entity_emb(self, context_entites, initial=None):
         j = 0
         if initial is None:
@@ -59,6 +51,14 @@ class GBRT(BaseWiki2Vec):
                 initial += self.emb.get_entity_vector(i)
                 j += 1
         return initial/j
+
+    def context_sim(self, context, candidates):
+        scores = {}
+        context_emb = self.encode_sentence(context)
+        candidate_emb = {i: self.encode_entity(i) for i in candidates}
+        for i in candidate_emb:
+            scores[i] = cos_sim(context_emb, candidate_emb[i])
+        return scores
 
     def rank(self, mentions_cands, context):
         # context_entities = self.get_unambiguous_entities(mentions_cands)

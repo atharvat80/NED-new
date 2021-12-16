@@ -4,14 +4,7 @@ import torch.nn.functional as f
 from flair.data import Sentence
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-
-
-def cos_sim(v1, v2):
-    v1v2 = np.linalg.norm(v1) * np.linalg.norm(v2)
-    if v1v2 == 0:
-        return 0
-    else:
-        return np.dot(v2, v1) / v1v2
+from src.utils import cos_sim
 
 
 class Base:
@@ -50,7 +43,7 @@ class Base:
                 ranking.append([candidate, score])
         return ranking
 
-    def link(self, mention, context, candidates, top_only=True):
+    def link(self, mention, context, candidates):
         # 2. Encode context-mention and candidates
         context = self.encode_sentence(context)
         candidate_enc = {i: self.encode_sentence(j) for i, j in candidates}
@@ -58,10 +51,7 @@ class Base:
         # 3. Candidate Ranking
         ranking = self.rank(candidate_enc, context)
         ranking.sort(key=lambda x: x[1], reverse=True)
-        if top_only:
-            return ranking[0] if len(ranking) > 0 else ['NULL', 0]
-        else:
-            return ranking
+        return ranking[0] if len(ranking) > 0 else ['NULL', 0]
 
 
 class BaseWiki2Vec(Base):
@@ -74,14 +64,13 @@ class BaseWiki2Vec(Base):
         words = self.tokenizer(s)
         if self.filter_stopwords:
             words = self.filter(words)
-        enc = []
+        emb, n = np.zeros(self.vector_size), 1
         for w in words:
             if self.emb.get_word(w.lower()) is not None:
-                enc.append(self.emb.get_word_vector(w.lower()))
-        if enc:
-            return sum(enc) / len(enc)
-        else:
-            return np.zeros((self.vector_size,))
+                emb += self.emb.get_word_vector(w.lower())
+                n += 1
+        return emb/n
+        
 
     def encode_entity(self, entity):
         entity = entity.replace('_', ' ')

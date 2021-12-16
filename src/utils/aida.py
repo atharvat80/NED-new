@@ -27,34 +27,10 @@ def get_document(num):
         return f.read().replace('\n', ' ')
 
 
-def get_candidates(doc, mention=None):
+def get_candidates(doc, mention, tag):
     df = pd.read_csv(os.path.join(DATADIR, 'candidates', f'{doc}.csv'))
-    if mention is None:
-        urls = df['url']
-    else:
-        urls = df[df['forMention'] == mention]['url']
-    titles = urls.map(lambda x: x[29:]).to_numpy()
-    return titles
-
-
-def get_mentions_cands(doc):
-    df = pd.read_csv(os.path.join(DATADIR, 'candidates', f'{doc}.csv'))
-    mentions = df['forMention']
-    mentions_cands = {}
-    for i in mentions:
-        urls = df[df['forMention'] == i]['url']
-        mentions_cands[i] = urls.map(lambda x: x[29:]).to_numpy()
-    return mentions_cands
-
-
-def get_mentions_tags(doc):
-    df = pd.read_csv(os.path.join(DATADIR, 'tags', f'{doc}.csv'))
-    mentions = df['text']
-    mentions_tags = {
-        i: df[df['text'] == i]['url'].values[0][29:]
-        for i in mentions
-    }
-    return mentions_tags
+    df = df[(df['mention'] == mention) & (df['tag'] == tag)]
+    return df['candidate'].to_numpy()
 
 
 def get_test_entity_desc(entity):
@@ -81,7 +57,7 @@ def test(model, global_context=False, inc_desc=True):
     mentions_tags = get_test_data('test')
     preds = []
     for mention, tag, local_context, doc_num in tqdm(mentions_tags):
-        candidates = get_candidates(doc_num, mention)
+        candidates = get_candidates(doc_num, mention, tag)
         if tag in candidates:
             if inc_desc:
                 candidates = [[i, get_test_entity_desc(i)] for i in candidates]
@@ -92,6 +68,5 @@ def test(model, global_context=False, inc_desc=True):
                 pred, _ = model.link(mention, local_context, candidates)
             preds.append([mention, tag, pred])
 
-    accuracy = round(
-        (sum([1 for _, t, p in preds if t == p]) / len(preds)) * 100, 2)
+    accuracy = round((sum([1 for _, t, p in preds if t == p]) / len(preds)) * 100, 2)
     print(f'Accuracy: {accuracy}%\nTotal test samples: {len(preds)}')

@@ -1,7 +1,16 @@
 import json
+import numpy as np
 from urllib import parse, request
 
 from googlesearch import search
+
+
+def cos_sim(v1, v2):
+    v1v2 = np.linalg.norm(v1) * np.linalg.norm(v2)
+    if v1v2 == 0:
+        return 0
+    else:
+        return np.dot(v2, v1) / v1v2
 
 
 def make_request(service_url, params):

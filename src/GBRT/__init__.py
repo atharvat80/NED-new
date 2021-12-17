@@ -1,28 +1,14 @@
-import os
-import pickle
-
 import nltk
 import numpy as np
-from src.models.base import BaseWiki2Vec
-from src.utils.GBRT import get_edit_dist, get_entity_prior, get_prior_prob, get_max_prior_prob
+from src.base import BaseWiki2Vec
 from src.utils import cos_sim
-
-# Define data path
-CWD = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-DATADIR = os.path.join(CWD, 'data', 'GBRT')
-
-
-def load_model(fname):
-    model = None
-    with open(os.path.join(DATADIR, fname), 'rb') as f:
-        model = pickle.load(f)
-    return model
-
+from src.GBRT.utils import *
 
 class GBRT(BaseWiki2Vec):
-    def __init__(self, emb, filter_stopwords=True, model_path=None, vector_size=100):
-        super().__init__(emb, filter_stopwords=filter_stopwords, vector_size=vector_size)
+    def __init__(self, emb_path, model_path=None, vector_size=100):
+        super().__init__(emb_path, vector_size=vector_size)
         self.model_path = model_path
+        self.two_step=False
 
     def get_nouns(self, s):
         nouns = []
@@ -48,15 +34,16 @@ class GBRT(BaseWiki2Vec):
 
     def link(self, mentions_cands, context):
         # load pre-trained model
-        model      = load_model(self.model_path)
+        model = load_model(self.model_path)
+        n_features = model.n_features_in_
         # Calculate max prior probability of all candidates.
-        mentions   = set([i for i, _ in mentions_cands])
+        mentions = set([i for i, _ in mentions_cands])
         candidates = set([i for _, j in mentions_cands for i in j])
-        max_prob   = get_max_prior_prob(mentions, candidates)
-        
+        max_prob = get_max_prior_prob(mentions, candidates)
+
         # Find unambiguous entities
         unamb_entities = [x for i, j in mentions_cands
-                            for x in j if get_prior_prob(x, i) > 0.95]
+                          for x in j if get_prior_prob(x, i) > 0.95]
         context_ent_emb = self.encode_context_entities(unamb_entities)
 
         # Make predictions
@@ -70,26 +57,35 @@ class GBRT(BaseWiki2Vec):
                 cand = candidate.replace('_', ' ').lower()
                 ment = mention.lower()
                 cand_emb = self.encode_entity(candidate)
-                X.append([
-                    candidate,
-                    # Base features
-                    get_prior_prob(candidate, mention),
-                    get_entity_prior(candidate),
-                    max_prob[candidate],
-                    num_cands,
-                    # String similarity
-                    get_edit_dist(ment, cand),
-                    ment == cand,
-                    ment in cand,
-                    cand.startswith(cand) or cand.endswith(ment),
-                    # Context similarity features 
-                    cos_sim(cand_emb, context_emb),
-                    cos_sim(cand_emb, context_ent_emb)
-                ])
-            
+                
+                # At the minimum add base feature values
+                feat_values = [
+                    candidate, 
+                    get_prior_prob(candidate, mention), 
+                    get_entity_prior(candidate), 
+                    max_prob[candidate], 
+                    num_cands
+                ]
+                # Add string similarity
+                if n_features >= 8:
+                    feat_values += [
+                        get_edit_dist(ment, cand), 
+                        ment == cand, 
+                        ment in cand, 
+                        cand.startswith(cand) or cand.endswith(ment)
+                    ]
+                # Add context similarity
+                if n_features >= 9:
+                    feat_values.append(cos_sim(cand_emb, context_emb))
+                # Add coherence score
+                if n_features >= 10:
+                    feat_values.append(cos_sim(cand_emb, context_ent_emb))
+                X.append(feat_values)
+
             # Add rank
-            # X.sort(key=lambda x: x[-1] + x[-2], reverse=True)
-            # X = [j + [i + 1] for i, j in enumerate(X)]
+            if n_features == 11:
+                X.sort(key=lambda x: x[-1] + x[-2], reverse=True)
+                X = [j + [i + 1] for i, j in enumerate(X)]
 
             # Predict
             pred, conf = 'NIL', 0
@@ -101,6 +97,8 @@ class GBRT(BaseWiki2Vec):
             predictions.append([mention, pred, conf])
 
             # Update context entity embedding (two-step)
-            context_ent_emb = self.encode_context_entities([i[1] for i in predictions])
-        
+            if self.two_step and n_features >= 10 and conf > 0.8:
+                context_ent_emb += self.encode_entity(pred)
+                context_ent_emb /= 2
+
         return predictions

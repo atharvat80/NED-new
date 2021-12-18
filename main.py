@@ -15,6 +15,13 @@ TYPE = {
     'MISC': ''
 }
 
+COLOR = {
+    'LOC': '#40E0D0',
+    'PER': '#6495ED',
+    'ORG': '#CCCCFF',
+    'MISC': '#FF7F50'
+}
+
 # Loading models
 tagger = SequenceTagger.load('flair/ner-english-fast')
 model = GBRT(EMB_PATH, model_path='coherence.pkl')
@@ -32,13 +39,17 @@ def get_candidates(query, tag):
     return list(set(res1 + res2))
 
 
-def display_tag(text, label):
+def display_tag(text, typ, label):
     info = 'unknown entity' if label == 'NIL' else get_entity_extract(label)
     if label != 'NIL':
         label = "https://en.wikipedia.org/wiki/" + label
-    return f'<a style="padding: 2px 5px; background-color: #1ABC9C; \
-        border-radius: 5px; color: white; cursor:pointer; text-decoration:none" \
-        href={label} target="_blank" title="{info}">{text}</a>'
+    return f"""
+    <a style="margin: 0 5px; padding: 2px 4px; border-radius: 4px; text-decoration:none;
+              background-color:{COLOR[typ]}; color: white; cursor:pointer" 
+       title="{info}" href={label} target="_blank">
+        <span style="padding-right:3px">{text}</span>
+        <span>{typ}</span>
+    </a>"""
 
 
 def main(text):
@@ -57,7 +68,7 @@ def main(text):
 
     with st.spinner('Rendering results...'):
         for i, ent in enumerate(doc.get_spans('ner')):
-            tag = display_tag(ent.text, preditions[i][1])
+            tag = display_tag(ent.text, ent.tag, preditions[i][1])
             tagged += text[last_pos:ent.start_pos] + tag
             last_pos = ent.end_pos
         tagged += text[last_pos:]

@@ -3,6 +3,7 @@ __pycache__/
 
 data
 results
+embeddings
 
 temp.txt
 temp.ipynb

@@ -44,9 +44,11 @@ def get_entity_extract(entity_title, num_sentences=1):
     return extract
 
 
-def google_search(query, num_results=10):
+def google_search(query, num_results=5):
     results = search(f"{query} site:en.wikipedia.org", num_results=num_results)
-    return [i[30:] for i in results]
+    results = [i[30:] for i in results]
+    results = [i for i in results if 'Wikipedia:' not in i]
+    return [i for i in results if 'disambiguation' not in i.lower()]
 
 
 def wikipedia_search(query, num_results=20):
@@ -60,8 +62,7 @@ def wikipedia_search(query, num_results=20):
     }
 
     results = make_request(service_url, search_params)[1]
-    results = [i.replace(' ', '_')
-               for i in results if 'disambiguation' not in i.lower()]
+    results = [i.replace(' ', '_') for i in results if 'disambiguation' not in i.lower()]
     return results
 
 

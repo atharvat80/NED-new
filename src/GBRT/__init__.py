@@ -8,7 +8,7 @@ class GBRT(BaseWiki2Vec):
     def __init__(self, emb_path, model_path=None, vector_size=100):
         super().__init__(emb_path, vector_size=vector_size)
         self.model_path = model_path
-        self.two_step=False
+        self.two_step = False
 
     def get_nouns(self, s):
         nouns = []

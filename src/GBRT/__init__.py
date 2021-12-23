@@ -97,7 +97,7 @@ class GBRT(BaseWiki2Vec):
             predictions.append([mention, pred, conf])
 
             # Update context entity embedding (two-step)
-            if self.two_step and n_features >= 10 and conf > 0.8:
+            if self.two_step and n_features >= 10:
                 context_ent_emb += self.encode_entity(pred)
                 context_ent_emb /= 2
 

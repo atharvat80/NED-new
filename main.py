@@ -23,9 +23,15 @@ COLOR = {
 }
 
 # Loading models
-tagger = SequenceTagger.load('flair/ner-english-fast')
-model = GBRT(EMB_PATH, model_path='coherence.pkl')
-default_text = 'George Washington went to Washington.'
+
+
+@st.cache(allow_output_mutation=True, show_spinner=True)
+def load_models():
+    tagger = SequenceTagger.load('flair/ner-english-fast')
+    model = GBRT(EMB_PATH, model_path='coherence.pkl')
+    model.two_step = True
+    return model, tagger
+
 
 # Page setup
 st.set_page_config(layout="wide", page_title='Named Entity Disambiguation')
@@ -33,14 +39,25 @@ st.write("## Named Entity Disambiguation")
 col1, col2 = st.columns(2)
 
 
-def get_candidates(query, tag):
-    res1 = google_search(f'{query} {TYPE[tag]}')
-    res2 = wikipedia_search(query)
-    return list(set(res1 + res2))
+def get_candidates(mentions_tags):
+    candidates = []
+    cache = {}
+    for mention, tag in mentions_tags:
+        if (mention, tag) in cache.keys():
+            candidates.append((mention, cache[(mention, tag)]))
+        else:
+            try:
+                res1 = google_search(f'{mention} {TYPE[tag]}')
+            except:
+                res1 = []
+            res2 = wikipedia_search(mention)
+            cands = list(set(res1 + res2))
+            candidates.append((mention, cands))
+            cache[(mention, tag)] = cands
+    return candidates
 
 
-def display_tag(text, typ, label):
-    info = 'unknown entity' if label == 'NIL' else get_entity_extract(label)
+def display_tag(text, typ, label, info):
     if label != 'NIL':
         label = "https://en.wikipedia.org/wiki/" + label
     return f"""
@@ -58,17 +75,19 @@ def main(text):
     tagged, last_pos = '', 0
 
     with st.spinner('Generating candidates...'):
-        mentions_cands = [
-            [ent.text, get_candidates(ent.text, ent.tag)]
-            for ent in doc.get_spans('ner')
-        ]
+        mentions_cands = get_candidates(
+            [(ent.text, ent.tag) for ent in doc.get_spans('ner')])
 
     with st.spinner('Disambiguating mentions...'):
         preditions = model.link(mentions_cands, text)
 
     with st.spinner('Rendering results...'):
+        ent_desc = {}
         for i, ent in enumerate(doc.get_spans('ner')):
-            tag = display_tag(ent.text, ent.tag, preditions[i][1])
+            label = preditions[i][1]
+            if label not in ent_desc.keys():
+                ent_desc[label] = get_entity_extract(label)
+            tag = display_tag(ent.text, ent.tag, label, ent_desc[label])
             tagged += text[last_pos:ent.start_pos] + tag
             last_pos = ent.end_pos
         tagged += text[last_pos:]
@@ -76,7 +95,7 @@ def main(text):
     with col2:
         st.write("### Disambiguated Text")
         components.html(f'<p style="line-height: 1.8; margin-top:30px;">{tagged}</p>',
-                        scrolling=True, height=350)
+                        scrolling=True, height=400)
 
     df = pd.DataFrame(data=preditions, columns=['Mention', 'Prediction', 'Confidence'])
     st.write("**Additional Information**")
@@ -84,6 +103,9 @@ def main(text):
 
 
 if __name__ == '__main__':
+    default_text = 'George Washington went to Washington.'
+    model, tagger = load_models()
+
     with col1:
         st.write("### Input Text")
         user_input = st.text_area('Press Ctrl + Enter to update results', default_text,

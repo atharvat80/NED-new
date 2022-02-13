@@ -1,14 +1,18 @@
-import json
 import os
-from urllib import parse, request
+import requests
 
 import numpy as np
 import pandas as pd
-from googlesearch import search
 from tqdm import tqdm
+from src.env import CSE_API_KEY, CSE_CX
 
 CWD = os.path.dirname(os.path.dirname(__file__))
 AIDADIR = os.path.join(CWD, 'data', 'aida')
+
+
+response = requests.get('https://google.com')
+if response.status_code == 200:
+    g_cookies = response.cookies.get_dict()
 
 
 def cos_sim(v1, v2):
@@ -17,12 +21,6 @@ def cos_sim(v1, v2):
         return 0
     else:
         return np.dot(v2, v1) / v1v2
-
-
-def make_request(service_url, params):
-    url = service_url + '?' + parse.urlencode(params)
-    response = json.loads(request.urlopen(url).read())
-    return response
 
 
 def get_entity_extract(entity_title, num_sentences=1):
@@ -38,22 +36,40 @@ def get_entity_extract(entity_title, num_sentences=1):
         'exsentences': num_sentences
     }
 
-    res = make_request(service_url, params)['query']['pages']
+    res = requests.get(service_url, params=params).json()['query']['pages']
     res = res[list(res.keys())[0]]
     extract = res['extract'] if 'extract' in res.keys() else ''
     return extract
 
 
+"""
+Custom Search Engine
+Dashboard: https://cse.google.com/
+JSON API Docs : https://developers.google.com/custom-search/v1/site_restricted_api 
+"""
 def google_search(query, num_results=5):
-    results = search(f"{query} site:en.wikipedia.org", num_results=num_results)
-    results = [i[30:] for i in results]
-    results = [i for i in results if 'Wikipedia:' not in i]
-    return [i for i in results if 'disambiguation' not in i.lower()]
+    service_url = "https://www.googleapis.com/customsearch/v1/siterestrict"
+    params = {
+        'q': query,
+        'num': num_results,
+        'start': 0,
+        'key': CSE_API_KEY,
+        'cx': CSE_CX 
+    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 \
+        (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'}
+    res = requests.get(service_url, params=params, headers=headers, cookies=g_cookies)
+    try:
+        cands = [i['title'].replace(' - Wikipedia', '') for i in res.json()["items"]]
+    except:
+        print(f"An error occurred, returning a empty list of candidates.\nStatus code: {res.status_code}")
+        cands = []
+    return [i.replace(' ', '_') for i in cands]
 
 
 def wikipedia_search(query, num_results=20):
     service_url = 'https://en.wikipedia.org/w/api.php'
-    search_params = {
+    params = {
         'action': 'opensearch',
         'search': query,
         'namespace': 0,
@@ -61,7 +77,7 @@ def wikipedia_search(query, num_results=20):
         'redirects': 'resolve',
     }
 
-    results = make_request(service_url, search_params)[1]
+    results = requests.get(service_url, params=params).json()[1]
     results = [i.replace(' ', '_') for i in results if 'disambiguation' not in i.lower()]
     return results
 

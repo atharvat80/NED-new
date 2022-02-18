@@ -1,9 +1,10 @@
 import os
+import json
 import requests
 
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 from src.env import CSE_API_KEY, CSE_CX
 
 CWD = os.path.dirname(os.path.dirname(__file__))
@@ -13,6 +14,11 @@ AIDADIR = os.path.join(CWD, 'data', 'aida')
 response = requests.get('https://google.com')
 if response.status_code == 200:
     g_cookies = response.cookies.get_dict()
+
+
+def load_json(fname):
+    with open(fname, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def cos_sim(v1, v2):
@@ -101,7 +107,7 @@ def get_local_context(mention, tag, doc):
 def test_local(model):
     correct = 0
     predictions = []
-    model.entity_desc_df = pd.read_csv(os.path.join(AIDADIR, 'entity_desc.csv'))
+    model.entity_desc_dict = load_json(os.path.join(AIDADIR, 'entities.json'))
     # For each document
     for doc in tqdm(range(1163, 1394)):
         df = pd.read_csv(os.path.join(AIDADIR, 'candidates', f'{doc}.csv'))
@@ -123,10 +129,13 @@ def test_local(model):
     return accuracy, results
                 
 
-def test_global(model):
+def test_global(model, is_wiki2vec=True):
     total = 0
     correct = 0
     predictions = []
+
+    if not(is_wiki2vec):
+        model.entity_desc_dict = load_json(os.path.join(AIDADIR, 'entities.json'))
     
     for doc in tqdm(range(1163, 1394)):
         # Generate test data

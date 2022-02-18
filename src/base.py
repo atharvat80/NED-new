@@ -10,7 +10,7 @@ class Base:
     def __init__(self, emb_path='', cased=True):
         self.cased = cased
         self.emb = KeyedVectors.load(emb_path) if emb_path else None
-        self.entity_desc_df = None
+        self.entity_desc_dict = None
         self.stop_words = set(stopwords.words('english'))
         self.tokenizer = word_tokenize
 
@@ -18,27 +18,23 @@ class Base:
         return [w for w in tokens if not w.lower() in self.stop_words]
     
     def encode_entity(self, entity):
-        desc = ''
-        if self.entity_desc_df is None:
+        if self.entity_desc_dict is None:
             desc = get_entity_extract(entity)
         else:
-            res = self.entity_desc_df[self.entity_desc_df['entity'] == entity]
-            res = res['description'].values[0]
-            if type(res) == str:
-                desc = res
+            desc = self.entity_desc_dict.get(entity, '')
             
         return self.encode_sentence(desc)
 
     def encode_sentence(self, s):
         words = self.tokenizer(s) if self.cased else self.tokenizer(s.lower())
         words = self.filter(words)
-        enc, n = np.zeros(self.emb.vector_size), 1
+        emb, n = np.zeros(self.emb.vector_size), 1
         for w in words:
             try:
-                enc += self.emb.get_vector(w)
+                emb += self.emb.get_vector(w)
             except:
                 pass
-        return enc/n
+        return emb/n
 
     def rank(self, candidates, context):
         ranking = []
@@ -61,10 +57,10 @@ class Base:
 
 
 class BaseWiki2Vec(Base):
-    def __init__(self, emb_path, vector_size=100):
+    def __init__(self, emb_path):
         super().__init__()
         self.emb = Wikipedia2Vec.load(emb_path)
-        self.vector_size = vector_size
+        self.vector_size = self.emb.train_params['dim_size']
 
     def encode_sentence(self, s):
         words = self.filter(self.tokenizer(s.lower()))

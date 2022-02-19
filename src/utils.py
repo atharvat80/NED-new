@@ -1,11 +1,12 @@
-import os
 import json
-import requests
+import os
+from urllib.parse import unquote
 
 import numpy as np
 import pandas as pd
-from src.env import CSE_API_KEY, CSE_CX
+import requests
 
+from src.env import CSE_API_KEY, CSE_CX
 
 CWD = os.path.dirname(os.path.dirname(__file__))
 AIDADIR = os.path.join(CWD, 'data', 'aida')
@@ -71,6 +72,30 @@ def google_search(query, num_results=5):
         print(f"An error occurred, returning a empty list of candidates.\nStatus code: {res.status_code}")
         cands = []
     return [i.replace(' ', '_') for i in cands]
+
+
+def ddg_search(query):
+    url = 'http://api.duckduckgo.com/'
+    res = requests.get(url, params={'q': query, 'format': 'json'})
+    results = []
+    if res.status_code == 200:
+        try:
+            res = json.loads(res.text)
+        except:
+            print("Error parsing", query)
+        else:
+            if 'disambiguation' not in res['AbstractURL']:
+                results.append(res['AbstractURL'])
+            for result in res['RelatedTopics']:
+                if 'FirstURL' in result.keys():
+                    results.append(result['FirstURL'])
+                elif result['Name'] != 'See also':
+                    results.extend([i['FirstURL'] for i in result['Topics']])
+            results = list(set([unquote(url).split('/')[-1] for url in results] ))
+    else:
+        pass
+    
+    return results
 
 
 def wikipedia_search(query, num_results=20):

@@ -64,7 +64,12 @@ class Base:
             try:
                 emb += self.emb.get_word_vector(w)
             except KeyError:
-                pass
+                if self.cased:
+                    try:
+                        emb += self.emb.get_word_vector(w.lower())
+                    except:
+                        pass
+
         return emb/n
 
 

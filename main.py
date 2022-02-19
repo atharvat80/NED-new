@@ -1,12 +1,14 @@
+import os
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from flair.data import Sentence
 from flair.models import SequenceTagger
-from src.GBRT import GBRT
+from src.gbrt import GBRT
 from src.utils import wikipedia_search, google_search, get_entity_extract
 
-EMB_PATH = "C:\\Personal Files\\NED-using-KG\\embeddings\\wiki2vec_w10_100d.pkl"
+EMB_PATH = os.path.join(os.getcwd(), 'embeddings', 'wiki2vec_w10_100d.pkl')
 
 TYPE = {
     'LOC': 'location',

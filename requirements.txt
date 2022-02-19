@@ -1,6 +1,5 @@
 flair
 gensim
-googlesearch-python
 nltk
 scikit-learn
 wikipedia2vec

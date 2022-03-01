@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-from src.env import CSE_API_KEY, CSE_CX
+from src.env import API_KEY, CSE_CX
 
 CWD = os.path.dirname(os.path.dirname(__file__))
 AIDADIR = os.path.join(CWD, 'data', 'aida')
@@ -54,13 +54,13 @@ Custom Search Engine
 Dashboard: https://cse.google.com/
 JSON API Docs : https://developers.google.com/custom-search/v1/site_restricted_api 
 """
-def google_search(query, num_results=5):
+def google_search(query, limit=10):
     service_url = "https://www.googleapis.com/customsearch/v1/siterestrict"
     params = {
         'q': query,
-        'num': num_results,
+        'num': limit,
         'start': 0,
-        'key': CSE_API_KEY,
+        'key': API_KEY,
         'cx': CSE_CX 
     }
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 \
@@ -72,6 +72,30 @@ def google_search(query, num_results=5):
         print(f"An error occurred, returning a empty list of candidates.\nStatus code: {res.status_code}")
         cands = []
     return [i.replace(' ', '_') for i in cands]
+
+
+def google_kb_search(query, limit=10):
+    results = []
+    service_url = 'https://kgsearch.googleapis.com/v1/entities:search'
+    params = {
+        'query': query,
+        'limit': limit,
+        'prefix': True,
+        'key': API_KEY,
+    }
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 \
+        (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'}
+    response = requests.get(service_url, params=params, headers=headers, cookies=g_cookies)
+    if response.status_code == 200:
+        response = response.json()
+        for i in response['itemListElement']:
+            try:
+                results.append(unquote(i['result']['detailedDescription']['url'].split('/')[-1]))
+            except:
+                pass
+    else:
+        print(f"Google KB search error code {response.status_code}")
+    return results
 
 
 def ddg_search(query):
@@ -98,13 +122,13 @@ def ddg_search(query):
     return results
 
 
-def wikipedia_search(query, num_results=20):
+def wikipedia_search(query, limit=20):
     service_url = 'https://en.wikipedia.org/w/api.php'
     params = {
         'action': 'opensearch',
         'search': query,
         'namespace': 0,
-        'limit': num_results,
+        'limit': limit,
         'redirects': 'resolve',
     }
 

@@ -5,7 +5,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wikipedia2vec import Wikipedia2Vec
 
-from src.utils import cos_sim, get_entity_extract
+from src.utils import cosine_similarity, get_entity_extract
 
 
 class Base:
@@ -63,23 +63,16 @@ class Base:
         for w in words:
             try:
                 emb += self.emb.get_word_vector(w)
+                n += 1
             except KeyError:
                 if self.cased:
                     try:
                         emb += self.emb.get_word_vector(w.lower())
-                    except:
+                        n += 1
+                    except KeyError:
                         pass
 
         return emb/n
-
-
-    def rank(self, candidates, context):
-        ranking = []
-        for candidate in candidates:
-            if candidates[candidate] is not None:
-                score = cos_sim(context, candidates[candidate])
-                ranking.append([candidate, score])
-        return ranking
 
 
     def link(self, mention, context, candidates):
@@ -87,7 +80,7 @@ class Base:
         pred, conf = 'NIL', 0
         for candidate in candidates:
             candidate_enc = self.encode_entity(candidate)
-            score = cos_sim(candidate_enc, context_enc)
+            score = cosine_similarity(candidate_enc, context_enc)
             if score > conf:
                 pred = candidate
                 conf = score

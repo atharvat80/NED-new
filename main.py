@@ -3,9 +3,9 @@ import os
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from flair.data import Sentence
-from flair.models import SequenceTagger
-from src.gbrt import GBRT
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+from transformers import pipeline
+from src.gbrt import GBRT, prior_prob
 from src.utils import wikipedia_search, google_search, get_entity_extract
 
 EMB_PATH = os.path.join(os.getcwd(), 'embeddings', 'wiki2vec_w10_100d.pkl')
@@ -25,13 +25,15 @@ COLOR = {
 }
 
 # Loading models
-
-
 @st.cache(allow_output_mutation=True, show_spinner=True)
 def load_models():
-    tagger = SequenceTagger.load('flair/ner-english-fast')
-    model = GBRT(EMB_PATH, model_path='coherence.pkl')
-    model.two_step = True
+    # NER
+    tokenizer = AutoTokenizer.from_pretrained("dslim/bert-base-NER")
+    bert_ner = AutoModelForTokenClassification.from_pretrained("dslim/bert-base-NER")
+    tagger = pipeline("token-classification", model=bert_ner, tokenizer=tokenizer, 
+                      device=0, aggregation_strategy="simple")
+    # NED
+    model = GBRT(EMB_PATH, model_path='wiki2vec_w10_100d.pkl_trained.pkl', two_step=True)
     return model, tagger
 
 
@@ -48,11 +50,8 @@ def get_candidates(mentions_tags):
         if (mention, tag) in cache.keys():
             candidates.append((mention, cache[(mention, tag)]))
         else:
-            try:
-                res1 = google_search(f'{mention} {TYPE[tag]}')
-            except:
-                res1 = []
-            res2 = wikipedia_search(mention)
+            res1 = google_search(mention)
+            res2 = wikipedia_search(mention, limit=30)
             cands = list(set(res1 + res2))
             candidates.append((mention, cands))
             cache[(mention, tag)] = cands
@@ -72,26 +71,24 @@ def display_tag(text, typ, label, info):
 
 
 def main(text):
-    doc = Sentence(text)
-    tagger.predict(doc)
+    ner_results = tagger(text)
     tagged, last_pos = '', 0
 
     with st.spinner('Generating candidates...'):
-        mentions_cands = get_candidates(
-            [(ent.text, ent.tag) for ent in doc.get_spans('ner')])
+        mentions_cands = get_candidates([(res['word'], res['entity_group']) for res in ner_results])
 
     with st.spinner('Disambiguating mentions...'):
         preditions = model.link(mentions_cands, text)
 
     with st.spinner('Rendering results...'):
         ent_desc = {}
-        for i, ent in enumerate(doc.get_spans('ner')):
+        for i, res in enumerate(ner_results):
             label = preditions[i][1]
             if label not in ent_desc.keys():
                 ent_desc[label] = get_entity_extract(label)
-            tag = display_tag(ent.text, ent.tag, label, ent_desc[label])
-            tagged += text[last_pos:ent.start_pos] + tag
-            last_pos = ent.end_pos
+            tag = display_tag(res['word'], res['entity_group'], label, ent_desc[label])
+            tagged += text[last_pos:res['start']] + tag
+            last_pos = res['end']
         tagged += text[last_pos:]
 
     with col2:
@@ -110,7 +107,6 @@ if __name__ == '__main__':
 
     with col1:
         st.write("### Input Text")
-        user_input = st.text_area('Press Ctrl + Enter to update results', default_text,
-                                  height=350)
+        user_input = st.text_area('Press Ctrl + Enter to update results', default_text, height=350)
         if user_input:
             main(user_input)

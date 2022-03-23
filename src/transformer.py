@@ -1,71 +1,69 @@
-import os
-import pickle
-
 import numpy as np
-from nltk import edit_distance
+import torch
 
-from src.base import Base
-from src.utils import cosine_similarity
-
-
-CWD = os.path.dirname(os.path.dirname(__file__))
-DATADIR = os.path.join(CWD, 'data', 'GBRT')
-
-"""
-Load Datafiles
-"""
-with open(os.path.join(DATADIR, 'entity_anchors.pkl'), 'rb') as f:
-    prior_prob = pickle.load(f)
-with open(os.path.join(DATADIR, 'entity_prior.pkl'), 'rb') as f:
-    entity_prior = pickle.load(f)
+from transformers import AutoTokenizer, AutoModel
+from src.gbrt import get_edit_dist, get_entity_prior, get_max_prior_prob, get_prior_prob, load_model
+from src.utils import get_entity_extract, cosine_similarity
 
 
-"""
-Helper Functions
-"""
-def get_edit_dist(x, y):
-    return edit_distance(x, y)
+class BaseTRF:
+    def __init__(self):
+        self.vector_size = 384
+        self.entity_desc_dict = None
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model_path = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.model = AutoModel.from_pretrained(self.model_path).to(self.device)
+
+    # Mean Pooling - Take attention mask into account for correct averaging
+    @staticmethod
+    def mean_pooling(model_output, attention_mask):
+        token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+
+    def encode_entity(self, entity):
+        if self.entity_desc_dict is None:
+            desc = get_entity_extract(entity)
+        else:
+            desc = self.entity_desc_dict.get(entity, '')
+        return self.encode_sentence(desc)
+
+    def encode_sentence(self, s):
+        if s:
+            # Tokenize sentences
+            encoded_input = self.tokenizer([s], padding=True, truncation=True, return_tensors='pt').to(self.device)
+            # Compute token embeddings
+            with torch.no_grad():
+                model_output = self.model(**encoded_input)
+            # Perform pooling. In this case, max pooling.
+            sentence_embeddings = self.mean_pooling(model_output, encoded_input['attention_mask'])
+            return sentence_embeddings[0].detach().cpu().numpy()
+        else:
+            return np.zeros((self.vector_size,))
+
+    def link(self, mention, context, candidates):
+        context_enc = self.encode_sentence(context)
+        pred, conf = 'NIL', 0
+        for candidate in candidates:
+            candidate_enc = self.encode_entity(candidate)
+            score = cosine_similarity(candidate_enc, context_enc)
+            if score > conf:
+                pred = candidate
+                conf = score
+        return pred, conf
 
 
-def get_entity_prior(entity):
-    try:
-        return entity_prior[entity.replace('_', ' ')]
-    except:
-        return 0
+# reference - https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 
 
-def get_prior_prob(entity, mention):
-    try:
-        entity = entity.replace('_', ' ')
-        mention = mention.lower()
-        return prior_prob[mention][entity] / sum(prior_prob[mention].values())
-    except:
-        return 0
-
-
-def get_max_prior_prob(mentions, candidates):
-    max_prob = {i: max([get_prior_prob(i, j) for j in mentions])
-                for i in candidates}
-    return max_prob
-
-
-def load_model(fname):
-    model = None
-    with open(os.path.join(DATADIR, fname), 'rb') as f:
-        model = pickle.load(f)
-    return model
-
-
-"""
-Entity Ranking using Gradient Boosting Regression Trees
-"""
-class GBRT(Base):
-    def __init__(self, emb_path, model_path=None, two_step=False, cased=False, nouns_only=True):
-        super().__init__(emb_path, cased=cased, nouns_only=nouns_only)
+class GBRT_TRF(BaseTRF):
+    def __init__(self, ranker_path=None, two_step=False):
+        super().__init__()
         self.two_step = two_step
-        if model_path is not None:
-            self.model = load_model(model_path)
-
+        if ranker_path is not None:
+            self.ranker = load_model(ranker_path)
+        
     def encode_context_entities(self, context_entities):
         emb, n = np.zeros(self.vector_size), 1
         for i in context_entities:
@@ -74,7 +72,7 @@ class GBRT(Base):
         return emb/n
 
     def link(self, mentions_cands, context):
-        n_features = self.model.n_features_in_
+        n_features = self.ranker.n_features_in_
 
         # Calculate max prior probability of all candidates.
         mentions = set([i for i, _ in mentions_cands])
@@ -89,6 +87,7 @@ class GBRT(Base):
         # Make predictions
         context_emb = self.encode_sentence(context)
         predictions = []
+
         for mention, candidates in mentions_cands:
             # Generate feature values
             num_cands = len(candidates)
@@ -130,7 +129,7 @@ class GBRT(Base):
             # Predict
             pred, conf = 'NIL', 0
             for i in X:
-                c = self.model.predict(np.array([i[1:]]))[0]
+                c = self.ranker.predict(np.array([i[1:]]))[0]
                 if c > conf:
                     pred = i[0]
                     conf = c

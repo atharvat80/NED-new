@@ -9,7 +9,7 @@ CWD = os.path.dirname(__file__)
 AIDADIR = os.path.join(CWD, 'data', 'aida')
 
 
-def aida_local(model):
+def aida_local(model, use_document=False):
     correct = 0
     predictions = []
     model.entity_desc_dict = load_json(os.path.join(AIDADIR, 'entities.json'))
@@ -21,7 +21,10 @@ def aida_local(model):
         for mention, tag in mentions_tags:
             candidates = df[(df['mention'] == mention) & (df['tag'] == tag)]
             candidates = candidates['candidate'].to_numpy()
-            context = get_local_context(mention, tag, doc)
+            if use_document:
+                context = get_document(doc)
+            else:
+                context = get_local_context(mention, tag, doc)
             # If the mention has a valid tag
             if context and tag != 'NIL':
                 pred, conf = model.link(mention, context, candidates)

@@ -22,7 +22,7 @@ def load_json(fname):
         return json.load(f)
 
 
-def cos_sim(v1, v2):
+def cosine_similarity(v1, v2):
     v1v2 = np.linalg.norm(v1) * np.linalg.norm(v2)
     if v1v2 == 0:
         return 0

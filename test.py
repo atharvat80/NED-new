@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 from tqdm import tqdm
-from src.utils import AIDADIR, get_document, get_local_context, load_json
+from src.utils import AIDADIR, get_document, get_local_context
 
 
 CWD = os.path.dirname(__file__)
@@ -12,7 +12,7 @@ AIDADIR = os.path.join(CWD, 'data', 'aida')
 def aida_local(model, use_document=False):
     correct = 0
     predictions = []
-    model.entity_desc_dict = load_json(os.path.join(AIDADIR, 'entities.json'))
+
     # For each document
     for doc in tqdm(range(1163, 1394)):
         df = pd.read_csv(os.path.join(AIDADIR, 'candidates', f'{doc}.csv'))
@@ -41,7 +41,6 @@ def aida_global(model):
     total = 0
     correct = 0
     predictions = []
-    model.entity_desc_dict = load_json(os.path.join(AIDADIR, 'entities.json'))
     
     for doc in tqdm(range(1163, 1394)):
         # Generate test data

@@ -36,6 +36,7 @@ class Base:
 
 
     def filter(self, tokens):
+        tokens = list(set(tokens))
         tokens = [w for w in tokens if not(w.lower() in self.stop_words)]
         tokens = [w for w in tokens if w.isalnum()]
         return self.get_nouns(tokens) if self.nouns_only else tokens

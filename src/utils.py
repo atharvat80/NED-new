@@ -1,3 +1,4 @@
+import pickle
 import json
 import os
 from urllib.parse import unquote
@@ -17,9 +18,9 @@ if response.status_code == 200:
     g_cookies = response.cookies.get_dict()
 
 
-def load_json(fname):
-    with open(fname, 'r', encoding='utf-8') as f:
-        return json.load(f)
+def load_pickle(fname):
+    with open(fname, 'rb') as f:
+        return pickle.load(f)
 
 
 def cosine_similarity(v1, v2):
@@ -39,9 +40,11 @@ def get_entity_extract(entity_title, num_sentences=1):
         'redirects': 1,
         'format': 'json',
         'explaintext': 1,
-        'exsectionformat': 'plain',
-        'exsentences': num_sentences
+        'exsectionformat': 'plain'
     }
+
+    if num_sentences != 0:
+        params['exsentences'] = num_sentences
 
     res = requests.get(service_url, params=params).json()['query']['pages']
     res = res[list(res.keys())[0]]

@@ -11,9 +11,9 @@ from src.utils import wikipedia_search, google_search, get_entity_extract
 EMB_PATH = os.path.join(os.getcwd(), 'embeddings', 'wiki2vec_w10_100d.pkl')
 
 TYPE = {
-    'LOC': 'location',
-    'PER': 'person',
-    'ORG': 'organization',
+    'LOC': ' location',
+    'PER': ' person',
+    'ORG': ' organization',
     'MISC': ''
 }
 
@@ -28,12 +28,12 @@ COLOR = {
 @st.cache(allow_output_mutation=True, show_spinner=True)
 def load_models():
     # NER
-    tokenizer = AutoTokenizer.from_pretrained("dslim/bert-base-NER")
-    bert_ner = AutoModelForTokenClassification.from_pretrained("dslim/bert-base-NER")
+    tokenizer = AutoTokenizer.from_pretrained("dslim/bert-base-NER-uncased")
+    bert_ner = AutoModelForTokenClassification.from_pretrained("dslim/bert-base-NER-uncased")
     tagger = pipeline("token-classification", model=bert_ner, tokenizer=tokenizer, 
-                      device=0, aggregation_strategy="simple")
+                      device=0, aggregation_strategy="average")
     # NED
-    model = GBRT(EMB_PATH, model_path='wiki2vec_w10_100d.pkl_trained.pkl', two_step=True)
+    model = GBRT(EMB_PATH, model_path='wiki2vec_w10_100d.pkl_trained.pkl')
     return model, tagger
 
 
@@ -50,8 +50,8 @@ def get_candidates(mentions_tags):
         if (mention, tag) in cache.keys():
             candidates.append((mention, cache[(mention, tag)]))
         else:
-            res1 = google_search(mention)
-            res2 = wikipedia_search(mention, limit=30)
+            res1 = google_search(mention + TYPE[tag])
+            res2 = wikipedia_search(mention, limit=10)
             cands = list(set(res1 + res2))
             candidates.append((mention, cands))
             cache[(mention, tag)] = cands
